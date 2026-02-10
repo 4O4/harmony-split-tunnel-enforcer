@@ -1,0 +1,10 @@
+{
+  "intranetDomains": [
+    "internal.corp.example.com",
+    "wiki.example.com"
+  ],
+  "intranetRoutes": [
+    "10.0.0.0/8"
+  ],
+  "autoApply": true
+}
