@@ -95,12 +95,14 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           SHA=$(shasum -a 256 HarmonySplitTunnelEnforcer.dmg | awk '{print $1}')
 
-          gh repo clone 4O4/homebrew-tap /tmp/homebrew-tap -- --depth 1
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/4O4/homebrew-tap.git" /tmp/homebrew-tap --depth 1
           cd /tmp/homebrew-tap
 
           sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/harmony-split-tunnel-enforcer.rb
           sed -i '' "s/sha256 \".*\"/sha256 \"${SHA}\"/" Casks/harmony-split-tunnel-enforcer.rb
 
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Casks/harmony-split-tunnel-enforcer.rb
           git commit -m "Update harmony-split-tunnel-enforcer to ${VERSION}"
           git push
