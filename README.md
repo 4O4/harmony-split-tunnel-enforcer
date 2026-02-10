@@ -48,7 +48,7 @@ brew install 4O4/tap/split-tunnel-enforcer
 
 ```sh
 ./bundle.sh                        # builds + creates .app bundle
-open "Split Tunnel Enforcer.app"
+open "Harmony Split Tunnel Enforcer.app"
 ```
 
 ## Usage

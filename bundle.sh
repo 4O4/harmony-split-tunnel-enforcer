@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="Split Tunnel Enforcer"
+APP_NAME="Harmony Split Tunnel Enforcer"
 BUNDLE_ID="net.rawbytes.harmony-split-tunnel-enforcer"
 EXECUTABLE="HarmonySplitTunnelEnforcer"
 

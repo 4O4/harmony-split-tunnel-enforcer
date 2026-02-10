@@ -16,7 +16,7 @@ struct StatusView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Text("Split Tunnel Enforcer")
+                Text("Harmony Split Tunnel Enforcer")
                     .font(.headline)
                 Spacer()
                 Circle()
