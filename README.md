@@ -1,6 +1,10 @@
-# Harmony Split Tunnel Enforcer
+<p align="center">
+  <img src="logo.png" alt="Split Tunnel Enforcer for Harmony SASE" width="800">
+</p>
 
-A native macOS menubar app that enforces split tunneling for Harmony SASE (formerly Perimeter 81 / Check Point) VPN.
+<p align="center">
+  A native macOS menubar app that enforces split tunneling for Harmony SASE (formerly Perimeter 81 / Check Point) VPN.
+</p>
 
 ![Menubar icon with green status dot, next to Harmony SASE](screenshot.png)
 
@@ -10,7 +14,7 @@ Harmony SASE supports split tunneling as an admin-configurable policy, but when 
 
 ## What It Does
 
-Harmony Split Tunnel Enforcer removes the VPN's catch-all routes (`0.0.0.0/1` and `128.0.0.0/1`), keeping only intranet-bound traffic on the VPN tunnel. Internet traffic flows through your normal gateway.
+Split Tunnel Enforcer removes the VPN's catch-all routes (`0.0.0.0/1` and `128.0.0.0/1`), keeping only intranet-bound traffic on the VPN tunnel. Internet traffic flows through your normal gateway.
 
 When enforcing split tunnel it:
 
@@ -44,7 +48,7 @@ Binary is at `.build/release/HarmonySplitTunnelEnforcer`.
 ./bundle.sh
 ```
 
-Produces `Harmony Split Tunnel Enforcer.app` with `LSUIElement = true` (no Dock icon).
+Produces `Split Tunnel Enforcer.app` with `LSUIElement = true` (no Dock icon).
 
 ## Running
 
@@ -55,7 +59,7 @@ Produces `Harmony Split Tunnel Enforcer.app` with `LSUIElement = true` (no Dock 
 Or from the .app bundle:
 
 ```sh
-open "Harmony Split Tunnel Enforcer.app"
+open "Split Tunnel Enforcer.app"
 ```
 
 ## Menubar States
