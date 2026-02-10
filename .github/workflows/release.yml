@@ -94,36 +94,13 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           SHA=$(shasum -a 256 HarmonySplitTunnelEnforcer.dmg | awk '{print $1}')
-          FILE="Casks/harmony-split-tunnel-enforcer.rb"
 
-          # Get current file SHA (needed for update API)
-          FILE_SHA=$(gh api "repos/4O4/homebrew-tap/contents/${FILE}" --jq '.sha')
+          gh repo clone 4O4/homebrew-tap /tmp/homebrew-tap -- --depth 1
+          cd /tmp/homebrew-tap
 
-          # Build new content
-          CONTENT=$(cat <<CASK
-          cask "harmony-split-tunnel-enforcer" do
-            version "${VERSION}"
-            sha256 "${SHA}"
+          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/harmony-split-tunnel-enforcer.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA}\"/" Casks/harmony-split-tunnel-enforcer.rb
 
-            url "https://github.com/4O4/harmony-split-tunnel-enforcer/releases/download/v#{version}/HarmonySplitTunnelEnforcer.dmg"
-            name "Harmony Split Tunnel Enforcer"
-            desc "Enforce split tunneling for Harmony SASE VPN"
-            homepage "https://github.com/4O4/harmony-split-tunnel-enforcer"
-
-            depends_on macos: ">= :ventura"
-
-            app "Harmony Split Tunnel Enforcer.app"
-
-            zap trash: [
-              "~/Library/Preferences/net.rawbytes.harmony-split-tunnel-enforcer.plist",
-            ]
-          end
-          CASK
-          )
-
-          # Update via GitHub API
-          echo "$CONTENT" | base64 | gh api "repos/4O4/homebrew-tap/contents/${FILE}" \
-            -X PUT \
-            -f message="Update harmony-split-tunnel-enforcer to ${VERSION}" \
-            -f content=@- \
-            -f sha="$FILE_SHA"
+          git add Casks/harmony-split-tunnel-enforcer.rb
+          git commit -m "Update harmony-split-tunnel-enforcer to ${VERSION}"
+          git push
