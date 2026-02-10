@@ -6,18 +6,59 @@ final class SplitTunnelEngine {
     private let pfAnchor = "com.apple/p81split"
     private let resolverDir = "/etc/resolver"
     private let logFile = "/tmp/harmony-split-tunnel-enforcer.log"
+    private let sudoersFile = "/etc/sudoers.d/harmony-split-tunnel"
 
-    private init() {}
+    private var sudoInstalled = false
+
+    private init() {
+        sudoInstalled = testSudoAccess()
+    }
+
+    // MARK: - Passwordless sudo setup
+
+    /// Install sudoers rule so route/pfctl/tee don't need password prompts.
+    /// Requires one initial password prompt via osascript.
+    func ensureSudoAccess() -> (success: Bool, message: String) {
+        if sudoInstalled { return (true, "Already installed") }
+
+        // Test if we already have passwordless access
+        if testSudoAccess() {
+            sudoInstalled = true
+            return (true, "Already have access")
+        }
+
+        log("Installing passwordless sudo rule (one-time setup)...")
+
+        let sudoersContent = "%admin ALL=(root) NOPASSWD: /sbin/route, /sbin/pfctl, /usr/bin/tee /etc/resolver/*, /bin/rm -f /etc/resolver/*, /bin/mkdir -p /etc/resolver"
+
+        let script = "echo '\(sudoersContent)' > \(sudoersFile) && chmod 0440 \(sudoersFile)"
+
+        let result = runOsascript(script: script)
+        if result.success {
+            sudoInstalled = true
+            log("Sudo rule installed at \(sudoersFile)")
+        }
+        return result
+    }
+
+    private func testSudoAccess() -> Bool {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
+        proc.arguments = ["-n", "route", "-n", "get", "default"]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            return proc.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
 
     // MARK: - Public API
 
     /// Apply split tunnel: zero-gap approach
-    /// 1. Add intranet routes FIRST (via VPN)
-    /// 2. Resolve intranet domain IPs via VPN DNS
-    /// 3. Add host routes for resolved IPs
-    /// 4. Delete catch-all 0/1 and 128.0/1
-    /// 5. Setup DNS resolver files
-    /// 6. Setup pf rules
     func applyOnce(state: VPNState, config: Config) -> (success: Bool, message: String) {
         guard state.connected else {
             return (false, "VPN not connected")
@@ -29,22 +70,24 @@ final class SplitTunnelEngine {
             return (false, "Cannot determine VPN interface/gateway")
         }
 
-        let realGw = state.realGateway ?? ""
+        // Ensure we have sudo access
+        let access = ensureSudoAccess()
+        if !access.success { return access }
+
         let realIf = state.realInterface ?? "en0"
         let vpnDNS = state.vpnDNS ?? vpnGw
 
         log("=== Enforcing split tunnel ===")
         log("VPN: \(vpnIf) gw=\(vpnGw) dns=\(vpnDNS)")
-        log("Real: \(realIf) gw=\(realGw)")
+        log("Real: \(realIf) gw=\(state.realGateway ?? "?")")
         log("Routes: \(config.intranetRoutes)")
         log("Domains: \(config.intranetDomains)")
 
-        // Build the privileged script
         var commands: [String] = []
 
         // Step 1: Add intranet CIDR routes via VPN (BEFORE deleting catch-all)
         for route in config.intranetRoutes {
-            commands.append("route -n add -net \(route) -interface \(vpnIf) 2>/dev/null || true")
+            commands.append("sudo route -n add -net \(route) -interface \(vpnIf) 2>/dev/null || true")
         }
 
         // Step 2: Resolve intranet domain IPs via VPN DNS and add host routes
@@ -53,51 +96,47 @@ final class SplitTunnelEngine {
             let ips = resolveDomain(domain, dnsServer: vpnDNS)
             resolvedIPs.append(contentsOf: ips)
             for ip in ips {
-                commands.append("route -n add -host \(ip) -interface \(vpnIf) 2>/dev/null || true")
+                commands.append("sudo route -n add -host \(ip) -interface \(vpnIf) 2>/dev/null || true")
             }
-            // Also resolve wildcard (common subdomains)
             let wildcardIPs = resolveDomain("*.\(domain)", dnsServer: vpnDNS)
             resolvedIPs.append(contentsOf: wildcardIPs)
             for ip in wildcardIPs {
-                commands.append("route -n add -host \(ip) -interface \(vpnIf) 2>/dev/null || true")
+                commands.append("sudo route -n add -host \(ip) -interface \(vpnIf) 2>/dev/null || true")
             }
         }
-        resolvedIPs = Array(Set(resolvedIPs)) // dedupe
+        resolvedIPs = Array(Set(resolvedIPs))
 
         // Step 3: Delete catch-all routes (AFTER adding specific routes — zero gap)
-        commands.append("route -n delete -net 0.0.0.0/1 -interface \(vpnIf) 2>/dev/null || true")
-        commands.append("route -n delete -net 128.0.0.0/1 -interface \(vpnIf) 2>/dev/null || true")
+        commands.append("sudo route -n delete -net 0.0.0.0/1 -interface \(vpnIf) 2>/dev/null || true")
+        commands.append("sudo route -n delete -net 128.0.0.0/1 -interface \(vpnIf) 2>/dev/null || true")
 
         // Step 4: DNS resolver files
-        commands.append("mkdir -p \(resolverDir)")
+        commands.append("sudo mkdir -p \(resolverDir)")
         for domain in config.intranetDomains {
-            let resolverFile = "\(resolverDir)/\(domain)"
-            let content = "nameserver \(vpnDNS)\\nsearch_order 1\\ntimeout 2"
-            commands.append("printf '\(content)\\n' > \(resolverFile)")
+            let content = "nameserver \(vpnDNS)\nsearch_order 1\ntimeout 2"
+            commands.append("echo '\(content)' | sudo tee \(resolverDir)/\(domain) > /dev/null")
         }
 
         // Step 5: pf rules
-        var pfRules = "# Harmony Split Tunnel Enforcer — pf rules\\n"
+        var pfRules = "# Harmony Split Tunnel Enforcer — pf rules\n"
         if !resolvedIPs.isEmpty {
             let ipList = resolvedIPs.joined(separator: ", ")
-            pfRules += "table <p81_intranet> { \(ipList) }\\n"
-            pfRules += "block drop out quick on \(realIf) from any to <p81_intranet>\\n"
+            pfRules += "table <p81_intranet> { \(ipList) }\n"
+            pfRules += "block drop out quick on \(realIf) from any to <p81_intranet>\n"
         }
         for route in config.intranetRoutes {
-            pfRules += "block drop out quick on \(realIf) from any to \(route)\\n"
+            pfRules += "block drop out quick on \(realIf) from any to \(route)\n"
         }
 
         let pfFile = "/tmp/p81split-pf.conf"
-        commands.append("printf '\(pfRules)' > \(pfFile)")
-        // Load the anchor rules
-        commands.append("pfctl -a '\(pfAnchor)' -f \(pfFile) 2>/dev/null || true")
-        commands.append("pfctl -e 2>/dev/null || true")
+        commands.append("echo '\(pfRules)' > \(pfFile)")
+        commands.append("sudo pfctl -a '\(pfAnchor)' -f \(pfFile) 2>/dev/null || true")
+        commands.append("sudo pfctl -e 2>/dev/null || true")
 
-        // Execute all privileged commands in one batch
         let script = commands.joined(separator: "\n")
-        log("Executing \(commands.count) privileged commands...")
+        log("Executing \(commands.count) commands...")
 
-        let result = runPrivileged(script: script)
+        let result = runShell(script: script)
         if result.success {
             log("Split tunnel enforced successfully")
             return (true, "Split tunnel enforced")
@@ -107,32 +146,37 @@ final class SplitTunnelEngine {
         }
     }
 
-    /// Restore full tunnel: undo everything
+    /// Restore full tunnel: remove pf/dns/intranet routes
     func restore(state: VPNState, config: Config) -> (success: Bool, message: String) {
         log("=== Restoring full tunnel ===")
+
+        let access = ensureSudoAccess()
+        if !access.success { return access }
+
+        guard let vpnIf = state.vpnInterface else {
+            return (false, "Cannot determine VPN interface")
+        }
 
         var commands: [String] = []
 
         // Remove pf rules
-        commands.append("pfctl -a '\(pfAnchor)' -F all 2>/dev/null || true")
+        commands.append("sudo pfctl -a '\(pfAnchor)' -F all 2>/dev/null || true")
 
         // Remove DNS resolver files
         for domain in config.intranetDomains {
-            commands.append("rm -f \(resolverDir)/\(domain)")
+            commands.append("sudo rm -f \(resolverDir)/\(domain)")
         }
 
-        // Remove intranet routes (they'll be re-added by VPN if full tunnel is restored)
-        if let vpnIf = state.vpnInterface {
-            for route in config.intranetRoutes {
-                commands.append("route -n delete -net \(route) -interface \(vpnIf) 2>/dev/null || true")
-            }
+        // Remove intranet-specific routes (VPN catch-all now covers them)
+        for route in config.intranetRoutes {
+            commands.append("sudo route -n delete -net \(route) -interface \(vpnIf) 2>/dev/null || true")
         }
 
         // Clean up temp file
         commands.append("rm -f /tmp/p81split-pf.conf")
 
         let script = commands.joined(separator: "\n")
-        let result = runPrivileged(script: script)
+        let result = runShell(script: script)
 
         if result.success {
             log("Full tunnel restored")
@@ -146,7 +190,6 @@ final class SplitTunnelEngine {
     // MARK: - DNS Resolution
 
     private func resolveDomain(_ domain: String, dnsServer: String) -> [String] {
-        // Use dig to resolve via VPN DNS
         let proc = Process()
         let pipe = Pipe()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/dig")
@@ -181,24 +224,47 @@ final class SplitTunnelEngine {
         return parts.allSatisfy { UInt8($0) != nil }
     }
 
-    // MARK: - Privileged Execution
+    // MARK: - Execution
 
-    private func runPrivileged(script: String) -> (success: Bool, message: String) {
-        // Use osascript to run with admin privileges — single password prompt
+    /// Run shell script using sudo (passwordless after setup)
+    private func runShell(script: String) -> (success: Bool, message: String) {
+        let proc = Process()
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        proc.executableURL = URL(fileURLWithPath: "/bin/bash")
+        proc.arguments = ["-c", script]
+        proc.standardOutput = outPipe
+        proc.standardError = errPipe
+
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+        } catch {
+            return (false, "Failed to run: \(error)")
+        }
+
+        if proc.terminationStatus == 0 {
+            return (true, "OK")
+        } else {
+            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+            let errStr = String(data: errData, encoding: .utf8) ?? "Unknown error"
+            return (false, errStr.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+    }
+
+    /// Run via osascript with admin privileges (only for initial sudo setup)
+    private func runOsascript(script: String) -> (success: Bool, message: String) {
         let escaped = script
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
 
-        let appleScript = """
-        do shell script "\(escaped)" with administrator privileges
-        """
+        let appleScript = "do shell script \"\(escaped)\" with administrator privileges"
 
         let proc = Process()
-        let outPipe = Pipe()
         let errPipe = Pipe()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         proc.arguments = ["-e", appleScript]
-        proc.standardOutput = outPipe
+        proc.standardOutput = FileHandle.nullDevice
         proc.standardError = errPipe
 
         do {
@@ -227,7 +293,6 @@ final class SplitTunnelEngine {
         let line = "[\(ts)] \(message)\n"
         print(line, terminator: "")
 
-        // Also append to log file (non-privileged)
         if let data = line.data(using: .utf8) {
             if FileManager.default.fileExists(atPath: logFile) {
                 if let fh = FileHandle(forWritingAtPath: logFile) {
