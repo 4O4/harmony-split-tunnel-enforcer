@@ -2,6 +2,8 @@
 
 A native macOS menubar app that enforces split tunneling for Harmony SASE (formerly Perimeter 81 / Check Point) VPN.
 
+![Menubar icon with green status dot, next to Harmony SASE](screenshot.png)
+
 ## Problem
 
 Harmony SASE supports split tunneling as an admin-configurable policy, but when the policy is set to full tunnel, all traffic routes through the VPN -- including personal browsing, streaming, and non-corporate services. There is no client-side option to override this.
