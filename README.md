@@ -36,7 +36,15 @@ On first run, a one-time admin prompt installs a passwordless `sudoers` rule for
 
 ## Install
 
-Download the latest DMG from [Releases](../../releases), or build from source:
+**Homebrew:**
+
+```sh
+brew install 4O4/tap/split-tunnel-enforcer
+```
+
+**Manual:** Download the latest DMG from [Releases](../../releases).
+
+**From source:**
 
 ```sh
 ./bundle.sh                        # builds + creates .app bundle
