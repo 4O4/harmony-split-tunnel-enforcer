@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build universal binary
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Create app bundle
+        run: |
+          APP_NAME="Split Tunnel Enforcer"
+          EXECUTABLE="HarmonySplitTunnelEnforcer"
+          BUNDLE_ID="net.rawbytes.harmony-split-tunnel-enforcer"
+          BUILD_DIR=".build/apple/Products/Release"
+
+          APP_DIR="${APP_NAME}.app"
+          CONTENTS="${APP_DIR}/Contents"
+          MACOS="${CONTENTS}/MacOS"
+          RESOURCES="${CONTENTS}/Resources"
+
+          mkdir -p "$MACOS" "$RESOURCES"
+          cp "${BUILD_DIR}/${EXECUTABLE}" "${MACOS}/${EXECUTABLE}"
+
+          if [ -f AppIcon.icns ]; then
+            cp AppIcon.icns "${RESOURCES}/AppIcon.icns"
+          fi
+
+          cat > "${CONTENTS}/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleDevelopmentRegion</key>
+              <string>en</string>
+              <key>CFBundleExecutable</key>
+              <string>${EXECUTABLE}</string>
+              <key>CFBundleIdentifier</key>
+              <string>${BUNDLE_ID}</string>
+              <key>CFBundleName</key>
+              <string>${APP_NAME}</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${GITHUB_REF_NAME#v}</string>
+              <key>CFBundleVersion</key>
+              <string>${GITHUB_RUN_NUMBER}</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>13.0</string>
+              <key>LSUIElement</key>
+              <true/>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>CFBundleIconFile</key>
+              <string>AppIcon</string>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Ad-hoc codesign
+        run: codesign --force --deep --sign - "Split Tunnel Enforcer.app"
+
+      - name: Create DMG
+        run: |
+          hdiutil create \
+            -volname "Split Tunnel Enforcer" \
+            -srcfolder "Split Tunnel Enforcer.app" \
+            -ov -format UDZO \
+            "HarmonySplitTunnelEnforcer.dmg"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Split Tunnel Enforcer $GITHUB_REF_NAME" \
+            --generate-notes \
+            HarmonySplitTunnelEnforcer.dmg
