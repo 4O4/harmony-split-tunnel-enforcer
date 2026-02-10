@@ -21,7 +21,7 @@ jobs:
         run: |
           APP_NAME="Harmony Split Tunnel Enforcer"
           EXECUTABLE="HarmonySplitTunnelEnforcer"
-          BUNDLE_ID="net.rawbytes.harmony-split-tunnel-enforcer"
+          BUNDLE_ID="net.rawbytes.harmony-harmony-split-tunnel-enforcer"
           BUILD_DIR=".build/apple/Products/Release"
 
           APP_DIR="${APP_NAME}.app"
@@ -97,9 +97,9 @@ jobs:
           gh repo clone 4O4/homebrew-tap /tmp/homebrew-tap
           cd /tmp/homebrew-tap
 
-          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/split-tunnel-enforcer.rb
-          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA}\"/" Casks/split-tunnel-enforcer.rb
+          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/harmony-split-tunnel-enforcer.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA}\"/" Casks/harmony-split-tunnel-enforcer.rb
 
-          git add Casks/split-tunnel-enforcer.rb
-          git commit -m "Update split-tunnel-enforcer to ${VERSION}"
+          git add Casks/harmony-split-tunnel-enforcer.rb
+          git commit -m "Update harmony-split-tunnel-enforcer to ${VERSION}"
           git push

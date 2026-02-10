@@ -39,7 +39,7 @@ On first run, a one-time admin prompt installs a passwordless `sudoers` rule for
 **Homebrew:**
 
 ```sh
-brew install 4O4/tap/split-tunnel-enforcer
+brew install 4O4/tap/harmony-split-tunnel-enforcer
 ```
 
 **Manual:** Download the latest DMG from [Releases](../../releases).
