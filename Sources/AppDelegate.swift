@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Combine
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -9,9 +10,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let config = Config.shared
     private let engine = SplitTunnelEngine.shared
 
+    private var cancellables = Set<AnyCancellable>()
+
+    /// Suppress auto-enforce briefly after a manual restore
+    private var suppressAutoEnforce = false
+    /// Debounce work item for route monitor events
+    private var pendingAutoEnforce: DispatchWorkItem?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Setup status bar item
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: 16)
         updateStatusTitle()
 
         if let button = statusItem.button {
@@ -19,7 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
-        // Setup popover
         popover = NSPopover()
         popover.contentSize = NSSize(width: 320, height: 420)
         popover.behavior = .transient
@@ -33,26 +39,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
 
-        // Start VPN polling
         vpnDetector.startPolling()
 
-        // Update title when state changes
         vpnDetector.$state
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updateStatusTitle() }
             .store(in: &cancellables)
 
-        // Setup route monitor
+        // Route monitor — debounced, suppressed after manual restore
         routeMonitor.onCatchAllRouteAdded = { [weak self] in
             guard let self = self else { return }
-            // Debounce: wait a moment for routes to stabilize
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            // Cancel any pending debounce
+            self.pendingAutoEnforce?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
+                guard !self.suppressAutoEnforce else {
+                    self.engine.log("Route monitor: suppressed (manual restore in progress)")
+                    self.vpnDetector.refresh()
+                    return
+                }
                 self.vpnDetector.refresh()
                 if self.config.autoApply && self.vpnDetector.state.hasCatchAll {
                     self.engine.log("Route monitor: catch-all detected, auto-enforcing...")
                     self.applyOnce()
                 }
             }
+            self.pendingAutoEnforce = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
         }
         routeMonitor.onRouteDeleted = { [weak self] in
             self?.vpnDetector.refresh()
@@ -78,10 +91,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private var cancellables = Set<AnyCancellable>()
-
     private func updateStatusTitle() {
-        statusItem.button?.title = vpnDetector.state.menuBarIcon
+        let image = MenuBarIcon.forState(vpnDetector.state)
+        statusItem.button?.image = image
+        statusItem.button?.title = ""
     }
 
     @objc private func togglePopover() {
@@ -94,7 +107,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else if let button = statusItem.button {
                 vpnDetector.refresh()
                 popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-                // Focus the popover
                 popover.contentViewController?.view.window?.makeKey()
             }
         }
@@ -119,14 +131,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(menuQuit), keyEquivalent: "q"))
 
-        // Set target for all items
         for item in menu.items where item.action != nil {
             item.target = self
         }
 
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
-        // Reset menu so left-click still works
         statusItem.menu = nil
     }
 
@@ -147,6 +157,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func restore() {
+        // Suppress auto-enforce so the route monitor doesn't immediately re-apply
+        suppressAutoEnforce = true
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let state = VPNDetector.detect()
@@ -156,12 +169,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if !result.success {
                     self.showAlert(title: "Restore Error", message: result.message)
                 }
+                // Re-enable auto-enforce after a delay (let routes stabilize)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                    self.suppressAutoEnforce = false
+                    self.engine.log("Auto-enforce re-enabled")
+                }
             }
         }
     }
 
     private func quit() {
-        // Clean up before quitting
         routeMonitor.stop()
         vpnDetector.stopPolling()
         NSApp.terminate(nil)
@@ -183,5 +200,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(URL(fileURLWithPath: engine.logFilePath))
     }
 }
-
-import Combine
