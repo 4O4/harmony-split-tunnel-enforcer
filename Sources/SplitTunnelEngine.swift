@@ -146,7 +146,7 @@ final class SplitTunnelEngine {
         }
     }
 
-    /// Restore full tunnel: remove pf/dns/intranet routes
+    /// Restore full tunnel: re-add catch-all routes, remove pf/dns/intranet routes
     func restore(state: VPNState, config: Config) -> (success: Bool, message: String) {
         log("=== Restoring full tunnel ===")
 
@@ -157,7 +157,18 @@ final class SplitTunnelEngine {
             return (false, "Cannot determine VPN interface")
         }
 
+        let vpnGw = state.vpnGateway ?? ""
+
         var commands: [String] = []
+
+        // Re-add catch-all routes to restore full tunnel
+        if vpnGw.isEmpty {
+            commands.append("sudo route -n add -net 0.0.0.0/1 -interface \(vpnIf) 2>/dev/null || true")
+            commands.append("sudo route -n add -net 128.0.0.0/1 -interface \(vpnIf) 2>/dev/null || true")
+        } else {
+            commands.append("sudo route -n add -net 0.0.0.0/1 \(vpnGw) 2>/dev/null || true")
+            commands.append("sudo route -n add -net 128.0.0.0/1 \(vpnGw) 2>/dev/null || true")
+        }
 
         // Remove pf rules
         commands.append("sudo pfctl -a '\(pfAnchor)' -F all 2>/dev/null || true")
