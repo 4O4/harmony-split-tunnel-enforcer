@@ -118,7 +118,7 @@ final class SplitTunnelEngine {
         }
 
         // Step 5: pf rules
-        var pfRules = "# Harmony Split Tunnel Enforcer — pf rules\n"
+        var pfRules = "# Split Tunnel Enforcer — pf rules\n"
         if !resolvedIPs.isEmpty {
             let ipList = resolvedIPs.joined(separator: ", ")
             pfRules += "table <p81_intranet> { \(ipList) }\n"

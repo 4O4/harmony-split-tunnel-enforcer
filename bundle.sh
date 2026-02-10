@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="Harmony Split Tunnel Enforcer"
+APP_NAME="Split Tunnel Enforcer"
 BUNDLE_ID="net.rawbytes.harmony-split-tunnel-enforcer"
 EXECUTABLE="HarmonySplitTunnelEnforcer"
 
@@ -22,6 +22,11 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS" "$RESOURCES"
 
 cp "${BUILD_DIR}/${EXECUTABLE}" "${MACOS}/${EXECUTABLE}"
+
+if [ -f "${SCRIPT_DIR}/AppIcon.icns" ]; then
+    cp "${SCRIPT_DIR}/AppIcon.icns" "${RESOURCES}/AppIcon.icns"
+    echo "Bundled AppIcon.icns"
+fi
 
 cat > "${CONTENTS}/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -48,6 +53,8 @@ cat > "${CONTENTS}/Info.plist" << PLIST
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
 </dict>
 </plist>
 PLIST

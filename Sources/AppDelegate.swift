@@ -72,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         routeMonitor.start()
 
-        engine.log("Harmony Split Tunnel Enforcer started")
+        engine.log("Split Tunnel Enforcer started")
 
         // Auto-enforce on startup if VPN is already in full tunnel mode
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2.0) { [weak self] in
