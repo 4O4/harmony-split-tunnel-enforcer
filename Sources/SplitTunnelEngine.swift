@@ -59,7 +59,7 @@ final class SplitTunnelEngine {
     // MARK: - Public API
 
     /// Apply split tunnel: zero-gap approach
-    func applyOnce(state: VPNState, config: Config) -> (success: Bool, message: String) {
+    func applyOnce(state: VPNState, config: Config.ConfigSnapshot) -> (success: Bool, message: String) {
         guard state.connected else {
             return (false, "VPN not connected")
         }
@@ -148,7 +148,7 @@ final class SplitTunnelEngine {
     }
 
     /// Restore full tunnel: re-add catch-all routes, remove pf/dns/intranet routes
-    func restore(state: VPNState, config: Config) -> (success: Bool, message: String) {
+    func restore(state: VPNState, config: Config.ConfigSnapshot) -> (success: Bool, message: String) {
         log("=== Restoring full tunnel ===")
 
         let access = ensureSudoAccess()

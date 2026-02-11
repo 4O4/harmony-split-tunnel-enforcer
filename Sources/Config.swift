@@ -39,6 +39,21 @@ final class Config: ObservableObject {
         didSet { defaults.set(autoApply, forKey: Keys.autoApply) }
     }
 
+    struct ConfigSnapshot {
+        let intranetDomains: [String]
+        let intranetRoutes: [String]
+        let autoApply: Bool
+    }
+
+    /// Must be called on the main thread.
+    func snapshot() -> ConfigSnapshot {
+        ConfigSnapshot(
+            intranetDomains: intranetDomains,
+            intranetRoutes: intranetRoutes,
+            autoApply: autoApply
+        )
+    }
+
     private(set) var configFilePath: String?
 
     private init() {

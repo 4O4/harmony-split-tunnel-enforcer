@@ -84,12 +84,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.log("Harmony Split Tunnel Enforcer started")
 
         // Auto-enforce on startup if VPN is already in full tunnel mode
+        let startupSnap = config.snapshot()
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2.0) { [weak self] in
             guard let self = self else { return }
             let state = VPNDetector.detect()
-            if self.config.autoApply && state.hasCatchAll {
+            if startupSnap.autoApply && state.hasCatchAll {
                 self.engine.log("Startup: VPN full tunnel detected, auto-enforcing...")
-                let result = self.engine.applyOnce(state: state, config: self.config)
+                let result = self.engine.applyOnce(state: state, config: startupSnap)
                 DispatchQueue.main.async {
                     self.vpnDetector.refresh()
                     if !result.success {
@@ -152,10 +153,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Actions
 
     private func applyOnce() {
+        let snap = config.snapshot()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let state = VPNDetector.detect()
-            let result = self.engine.applyOnce(state: state, config: self.config)
+            let result = self.engine.applyOnce(state: state, config: snap)
             DispatchQueue.main.async {
                 self.vpnDetector.refresh()
                 if !result.success {
@@ -169,10 +171,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Suppress auto-enforce so the route monitor doesn't immediately re-apply
         suppressAutoEnforce = true
 
+        let snap = config.snapshot()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let state = VPNDetector.detect()
-            let result = self.engine.restore(state: state, config: self.config)
+            let result = self.engine.restore(state: state, config: snap)
             DispatchQueue.main.async {
                 self.vpnDetector.refresh()
                 if !result.success {
