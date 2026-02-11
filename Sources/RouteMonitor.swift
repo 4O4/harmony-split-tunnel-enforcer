@@ -1,13 +1,24 @@
 import Foundation
 
 final class RouteMonitor {
-    private var process: Process?
-    private var isRunning = false
+    private var _process: Process?
+    private var _isRunning = false
+    private let lock = DispatchQueue(label: "com.harmony.routemonitor.lock")
 
-    /// Called on main thread when a catch-all route is added (VPN reconnect detected)
-    var onCatchAllRouteAdded: (() -> Void)?
+    private var process: Process? {
+        get { lock.sync { _process } }
+        set { lock.sync { _process = newValue } }
+    }
 
-    /// Called on main thread when a route is deleted (possible VPN disconnect)
+    private var isRunning: Bool {
+        get { lock.sync { _isRunning } }
+        set { lock.sync { _isRunning = newValue } }
+    }
+
+    /// Called on main thread when a route is added
+    var onRouteAdded: (() -> Void)?
+
+    /// Called on main thread when a route is deleted
     var onRouteDeleted: (() -> Void)?
 
     func start() {
@@ -78,7 +89,7 @@ final class RouteMonitor {
 
         if trimmed.contains("RTM_ADD") {
             DispatchQueue.main.async { [weak self] in
-                self?.onCatchAllRouteAdded?()
+                self?.onRouteAdded?()
             }
         }
 

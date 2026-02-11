@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         // Route monitor — debounced, suppressed after manual restore
-        routeMonitor.onCatchAllRouteAdded = { [weak self] in
+        routeMonitor.onRouteAdded = { [weak self] in
             guard let self = self else { return }
             // Don't reset debounce if one is already pending — fire on first event, not last
             if self.pendingAutoEnforce != nil {
