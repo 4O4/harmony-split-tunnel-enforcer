@@ -9,6 +9,11 @@ final class SplitTunnelEngine {
     private let sudoersFile = "/etc/sudoers.d/harmony-split-tunnel"
 
     private var sudoInstalled = false
+    private let logQueue = DispatchQueue(label: "com.harmony.splittunnel.log")
+    private let logFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        return f
+    }()
 
     private init() {
         sudoInstalled = testSudoAccess()
@@ -309,19 +314,21 @@ final class SplitTunnelEngine {
     // MARK: - Logging
 
     func log(_ message: String) {
-        let ts = ISO8601DateFormatter().string(from: Date())
-        let line = "[\(ts)] \(message)\n"
-        print(line, terminator: "")
-
-        if let data = line.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: logFile) {
-                if let fh = FileHandle(forWritingAtPath: logFile) {
+        let date = Date()
+        logQueue.async { [weak self] in
+            guard let self = self else { return }
+            let ts = self.logFormatter.string(from: date)
+            let line = "[\(ts)] \(message)\n"
+            print(line, terminator: "")
+            guard let data = line.data(using: .utf8) else { return }
+            if FileManager.default.fileExists(atPath: self.logFile) {
+                if let fh = FileHandle(forWritingAtPath: self.logFile) {
                     fh.seekToEndOfFile()
                     fh.write(data)
                     fh.closeFile()
                 }
             } else {
-                FileManager.default.createFile(atPath: logFile, contents: data)
+                FileManager.default.createFile(atPath: self.logFile, contents: data)
             }
         }
     }
