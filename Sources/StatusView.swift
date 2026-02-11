@@ -15,9 +15,21 @@ struct StatusView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
-            HStack {
-                Text("Harmony Split Tunnel Enforcer")
-                    .font(.headline)
+            HStack(spacing: 10) {
+                Image(nsImage: PopoverIcon.build(status: statusColor == .green ? .enforced : statusColor == .orange ? .fullTunnel : .disconnected))
+                    .frame(width: 36, height: 36)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 0) {
+                        Text("Split Tunnel ")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.green)
+                        Text("Enforcer")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    Text("for Harmony")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
                 Spacer()
                 Circle()
                     .fill(statusColor)
