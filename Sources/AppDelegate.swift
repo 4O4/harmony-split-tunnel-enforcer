@@ -49,25 +49,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Route monitor — debounced, suppressed after manual restore
         routeMonitor.onCatchAllRouteAdded = { [weak self] in
             guard let self = self else { return }
-            // Cancel any pending debounce
-            self.pendingAutoEnforce?.cancel()
+            // Don't reset debounce if one is already pending — fire on first event, not last
+            if self.pendingAutoEnforce != nil {
+                return
+            }
+            self.engine.log("[AppDelegate] RTM_ADD received, scheduling check (0.5s)")
             let work = DispatchWorkItem { [weak self] in
                 guard let self = self else { return }
+                self.pendingAutoEnforce = nil
                 guard !self.suppressAutoEnforce else {
-                    self.engine.log("Route monitor: suppressed (manual restore in progress)")
+                    self.engine.log("[AppDelegate] Debounce fired: suppressed (manual restore in progress)")
                     self.vpnDetector.refresh()
                     return
                 }
-                self.vpnDetector.refresh()
-                if self.config.autoApply && self.vpnDetector.state.hasCatchAll {
-                    self.engine.log("Route monitor: catch-all detected, auto-enforcing...")
+                // Synchronous detect to avoid race with async refresh
+                let state = VPNDetector.detect()
+                self.engine.log("[AppDelegate] Debounce fired: autoApply=\(self.config.autoApply) hasCatchAll=\(state.hasCatchAll) connected=\(state.connected) vpnIf=\(state.vpnInterface ?? "nil")")
+                if self.config.autoApply && state.hasCatchAll {
+                    self.engine.log("[AppDelegate] Auto-enforcing...")
                     self.applyOnce()
+                } else {
+                    self.vpnDetector.refresh()
                 }
             }
             self.pendingAutoEnforce = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
         }
         routeMonitor.onRouteDeleted = { [weak self] in
+            self?.engine.log("[AppDelegate] RTM_DELETE received, refreshing state")
             self?.vpnDetector.refresh()
         }
         routeMonitor.start()

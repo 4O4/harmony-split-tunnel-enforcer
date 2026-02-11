@@ -71,13 +71,12 @@ final class RouteMonitor {
 
     private func processLine(_ line: String) {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
 
-        // RTM_ADD: new route added
-        // We look for catch-all routes: 0.0.0.0/1 or 128.0.0.0/1 via utun
+        // Log all route monitor events
+        SplitTunnelEngine.shared.log("[RouteMonitor] \(trimmed)")
+
         if trimmed.contains("RTM_ADD") {
-            // The route monitor output format varies, but catch-all route additions
-            // typically show "got message of size" then "RTM_ADD" then route details
-            // We trigger a full refresh to check state rather than parsing binary output
             DispatchQueue.main.async { [weak self] in
                 self?.onCatchAllRouteAdded?()
             }

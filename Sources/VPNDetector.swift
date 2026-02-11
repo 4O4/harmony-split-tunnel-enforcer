@@ -47,7 +47,13 @@ final class VPNDetector: ObservableObject {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let newState = Self.detect()
             DispatchQueue.main.async {
-                self?.state = newState
+                guard let self = self else { return }
+                let old = self.state
+                self.state = newState
+                // Log state transitions
+                if old.connected != newState.connected || old.hasCatchAll != newState.hasCatchAll || old.splitActive != newState.splitActive || old.vpnInterface != newState.vpnInterface {
+                    SplitTunnelEngine.shared.log("[VPNDetector] State changed: connected=\(newState.connected) hasCatchAll=\(newState.hasCatchAll) splitActive=\(newState.splitActive) vpnIf=\(newState.vpnInterface ?? "nil") vpnGw=\(newState.vpnGateway ?? "nil") realGw=\(newState.realGateway ?? "nil") realIf=\(newState.realInterface ?? "nil")")
+                }
             }
         }
     }
