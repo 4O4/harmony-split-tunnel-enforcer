@@ -74,46 +74,47 @@ final class SplitTunnelEngine {
         let access = ensureSudoAccess()
         if !access.success { return access }
 
-        let realIf = state.realInterface ?? "en0"
-        let vpnDNS = state.vpnDNS ?? vpnGw
+        // Validate all interpolated values (defense-in-depth against shell injection)
+        guard let safeVpnIf = InputValidation.validateInterface(vpnIf) else {
+            return (false, "Invalid VPN interface name: \(vpnIf)")
+        }
+        let safeRealIf = InputValidation.validateInterface(state.realInterface ?? "en0") ?? "en0"
+        let safeVpnDNS = InputValidation.validateIPv4(state.vpnDNS ?? vpnGw) ?? InputValidation.validateIPv4(vpnGw) ?? vpnGw
+        let validRoutes = config.intranetRoutes.compactMap { InputValidation.validateCIDR($0) }
+        let validDomains = config.intranetDomains.compactMap { InputValidation.validateDomain($0) }
 
         log("=== Enforcing split tunnel ===")
-        log("VPN: \(vpnIf) gw=\(vpnGw) dns=\(vpnDNS)")
-        log("Real: \(realIf) gw=\(state.realGateway ?? "?")")
-        log("Routes: \(config.intranetRoutes)")
-        log("Domains: \(config.intranetDomains)")
+        log("VPN: \(safeVpnIf) gw=\(vpnGw) dns=\(safeVpnDNS)")
+        log("Real: \(safeRealIf) gw=\(state.realGateway ?? "?")")
+        log("Routes: \(validRoutes)")
+        log("Domains: \(validDomains)")
 
         var commands: [String] = []
 
         // Step 1: Add intranet CIDR routes via VPN (BEFORE deleting catch-all)
-        for route in config.intranetRoutes {
-            commands.append("sudo route -n add -net \(route) -interface \(vpnIf) 2>/dev/null || true")
+        for route in validRoutes {
+            commands.append("sudo route -n add -net \(route) -interface \(safeVpnIf) 2>/dev/null || true")
         }
 
         // Step 2: Resolve intranet domain IPs via VPN DNS and add host routes
         var resolvedIPs: [String] = []
-        for domain in config.intranetDomains {
-            let ips = resolveDomain(domain, dnsServer: vpnDNS)
+        for domain in validDomains {
+            let ips = resolveDomain(domain, dnsServer: safeVpnDNS)
             resolvedIPs.append(contentsOf: ips)
             for ip in ips {
-                commands.append("sudo route -n add -host \(ip) -interface \(vpnIf) 2>/dev/null || true")
-            }
-            let wildcardIPs = resolveDomain("*.\(domain)", dnsServer: vpnDNS)
-            resolvedIPs.append(contentsOf: wildcardIPs)
-            for ip in wildcardIPs {
-                commands.append("sudo route -n add -host \(ip) -interface \(vpnIf) 2>/dev/null || true")
+                commands.append("sudo route -n add -host \(ip) -interface \(safeVpnIf) 2>/dev/null || true")
             }
         }
         resolvedIPs = Array(Set(resolvedIPs))
 
         // Step 3: Delete catch-all routes (AFTER adding specific routes — zero gap)
-        commands.append("sudo route -n delete -net 0.0.0.0/1 -interface \(vpnIf) 2>/dev/null || true")
-        commands.append("sudo route -n delete -net 128.0.0.0/1 -interface \(vpnIf) 2>/dev/null || true")
+        commands.append("sudo route -n delete -net 0.0.0.0/1 -interface \(safeVpnIf) 2>/dev/null || true")
+        commands.append("sudo route -n delete -net 128.0.0.0/1 -interface \(safeVpnIf) 2>/dev/null || true")
 
         // Step 4: DNS resolver files
         commands.append("sudo mkdir -p \(resolverDir)")
-        for domain in config.intranetDomains {
-            let content = "nameserver \(vpnDNS)\nsearch_order 1\ntimeout 2"
+        for domain in validDomains {
+            let content = "nameserver \(safeVpnDNS)\nsearch_order 1\ntimeout 2"
             commands.append("echo '\(content)' | sudo tee \(resolverDir)/\(domain) > /dev/null")
         }
 
@@ -122,10 +123,10 @@ final class SplitTunnelEngine {
         if !resolvedIPs.isEmpty {
             let ipList = resolvedIPs.joined(separator: ", ")
             pfRules += "table <p81_intranet> { \(ipList) }\n"
-            pfRules += "block drop out quick on \(realIf) from any to <p81_intranet>\n"
+            pfRules += "block drop out quick on \(safeRealIf) from any to <p81_intranet>\n"
         }
-        for route in config.intranetRoutes {
-            pfRules += "block drop out quick on \(realIf) from any to \(route)\n"
+        for route in validRoutes {
+            pfRules += "block drop out quick on \(safeRealIf) from any to \(route)\n"
         }
 
         let pfFile = "/tmp/p81split-pf.conf"
@@ -153,34 +154,38 @@ final class SplitTunnelEngine {
         let access = ensureSudoAccess()
         if !access.success { return access }
 
-        guard let vpnIf = state.vpnInterface else {
+        guard let vpnIf = state.vpnInterface,
+              let safeVpnIf = InputValidation.validateInterface(vpnIf) else {
             return (false, "Cannot determine VPN interface")
         }
 
         let vpnGw = state.vpnGateway ?? ""
+        let validDomains = config.intranetDomains.compactMap { InputValidation.validateDomain($0) }
+        let validRoutes = config.intranetRoutes.compactMap { InputValidation.validateCIDR($0) }
 
         var commands: [String] = []
 
         // Re-add catch-all routes to restore full tunnel
         if vpnGw.isEmpty {
-            commands.append("sudo route -n add -net 0.0.0.0/1 -interface \(vpnIf) 2>/dev/null || true")
-            commands.append("sudo route -n add -net 128.0.0.0/1 -interface \(vpnIf) 2>/dev/null || true")
+            commands.append("sudo route -n add -net 0.0.0.0/1 -interface \(safeVpnIf) 2>/dev/null || true")
+            commands.append("sudo route -n add -net 128.0.0.0/1 -interface \(safeVpnIf) 2>/dev/null || true")
         } else {
-            commands.append("sudo route -n add -net 0.0.0.0/1 \(vpnGw) 2>/dev/null || true")
-            commands.append("sudo route -n add -net 128.0.0.0/1 \(vpnGw) 2>/dev/null || true")
+            let safeGw = InputValidation.validateIPv4(vpnGw) ?? vpnGw
+            commands.append("sudo route -n add -net 0.0.0.0/1 \(safeGw) 2>/dev/null || true")
+            commands.append("sudo route -n add -net 128.0.0.0/1 \(safeGw) 2>/dev/null || true")
         }
 
         // Remove pf rules
         commands.append("sudo pfctl -a '\(pfAnchor)' -F all 2>/dev/null || true")
 
         // Remove DNS resolver files
-        for domain in config.intranetDomains {
+        for domain in validDomains {
             commands.append("sudo rm -f \(resolverDir)/\(domain)")
         }
 
         // Remove intranet-specific routes (VPN catch-all now covers them)
-        for route in config.intranetRoutes {
-            commands.append("sudo route -n delete -net \(route) -interface \(vpnIf) 2>/dev/null || true")
+        for route in validRoutes {
+            commands.append("sudo route -n delete -net \(route) -interface \(safeVpnIf) 2>/dev/null || true")
         }
 
         // Clean up temp file
@@ -201,10 +206,16 @@ final class SplitTunnelEngine {
     // MARK: - DNS Resolution
 
     private func resolveDomain(_ domain: String, dnsServer: String) -> [String] {
+        guard let safeDomain = InputValidation.validateDomain(domain) else {
+            log("Skipping invalid domain: \(domain)")
+            return []
+        }
+        let safeDNS = InputValidation.validateIPv4(dnsServer) ?? dnsServer
+
         let proc = Process()
         let pipe = Pipe()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/dig")
-        proc.arguments = ["+short", "+time=2", "+tries=1", "@\(dnsServer)", domain, "A"]
+        proc.arguments = ["+short", "+time=2", "+tries=1", "@\(safeDNS)", safeDomain, "A"]
         proc.standardOutput = pipe
         proc.standardError = FileHandle.nullDevice
 
@@ -230,9 +241,7 @@ final class SplitTunnelEngine {
     }
 
     private func isValidIPv4(_ s: String) -> Bool {
-        let parts = s.split(separator: ".")
-        guard parts.count == 4 else { return false }
-        return parts.allSatisfy { UInt8($0) != nil }
+        InputValidation.validateIPv4(s) != nil
     }
 
     // MARK: - Execution

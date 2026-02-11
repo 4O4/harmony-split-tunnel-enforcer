@@ -75,6 +75,10 @@ final class Config: ObservableObject {
             self.autoApply = fileAutoApply ?? true
             defaults.set(self.autoApply, forKey: Keys.autoApply)
         }
+
+        // Sanitize loaded values to prevent shell injection
+        self.intranetDomains = self.intranetDomains.compactMap { InputValidation.validateDomain($0) }
+        self.intranetRoutes = self.intranetRoutes.compactMap { InputValidation.validateCIDR($0) }
     }
 
     private static func loadConfigFile() -> (config: ConfigFile?, path: String?) {

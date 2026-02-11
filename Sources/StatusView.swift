@@ -183,8 +183,8 @@ struct StatusView: View {
     }
 
     private func addDomain() {
-        let d = newDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !d.isEmpty, !config.intranetDomains.contains(d) else { return }
+        guard let d = InputValidation.validateDomain(newDomain),
+              !config.intranetDomains.contains(d) else { newDomain = ""; return }
         config.intranetDomains.append(d)
         newDomain = ""
     }
@@ -194,8 +194,8 @@ struct StatusView: View {
     }
 
     private func addRoute() {
-        let r = newRoute.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !r.isEmpty, !config.intranetRoutes.contains(r) else { return }
+        guard let r = InputValidation.validateCIDR(newRoute),
+              !config.intranetRoutes.contains(r) else { newRoute = ""; return }
         config.intranetRoutes.append(r)
         newRoute = ""
     }
