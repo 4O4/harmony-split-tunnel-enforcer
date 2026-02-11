@@ -98,7 +98,7 @@ final class SplitTunnelEngine {
 
         // Step 1: Add intranet CIDR routes via VPN (BEFORE deleting catch-all)
         for route in validRoutes {
-            commands.append("sudo route -n add -net \(route) -interface \(safeVpnIf) 2>/dev/null || true")
+            commands.append("sudo route -n add -net \(route) -interface \(safeVpnIf) 2>&1 || true")
         }
 
         // Step 2: Resolve intranet domain IPs via VPN DNS and add host routes
@@ -107,14 +107,14 @@ final class SplitTunnelEngine {
             let ips = resolveDomain(domain, dnsServer: safeVpnDNS)
             resolvedIPs.append(contentsOf: ips)
             for ip in ips {
-                commands.append("sudo route -n add -host \(ip) -interface \(safeVpnIf) 2>/dev/null || true")
+                commands.append("sudo route -n add -host \(ip) -interface \(safeVpnIf) 2>&1 || true")
             }
         }
         resolvedIPs = Array(Set(resolvedIPs))
 
         // Step 3: Delete catch-all routes (AFTER adding specific routes — zero gap)
-        commands.append("sudo route -n delete -net 0.0.0.0/1 -interface \(safeVpnIf) 2>/dev/null || true")
-        commands.append("sudo route -n delete -net 128.0.0.0/1 -interface \(safeVpnIf) 2>/dev/null || true")
+        commands.append("sudo route -n delete -net 0.0.0.0/1 -interface \(safeVpnIf) 2>&1 || true")
+        commands.append("sudo route -n delete -net 128.0.0.0/1 -interface \(safeVpnIf) 2>&1 || true")
 
         // Step 4: DNS resolver files
         commands.append("sudo mkdir -p \(resolverDir)")
@@ -136,8 +136,8 @@ final class SplitTunnelEngine {
 
         let pfFile = "/tmp/p81split-pf.conf"
         commands.append("echo '\(pfRules)' > \(pfFile)")
-        commands.append("sudo pfctl -a '\(pfAnchor)' -f \(pfFile) 2>/dev/null || true")
-        commands.append("sudo pfctl -e 2>/dev/null || true")
+        commands.append("sudo pfctl -a '\(pfAnchor)' -f \(pfFile) 2>&1 || true")
+        commands.append("sudo pfctl -e 2>&1 || true")
 
         let script = commands.joined(separator: "\n")
         log("Executing \(commands.count) commands...")
@@ -172,16 +172,16 @@ final class SplitTunnelEngine {
 
         // Re-add catch-all routes to restore full tunnel
         if vpnGw.isEmpty {
-            commands.append("sudo route -n add -net 0.0.0.0/1 -interface \(safeVpnIf) 2>/dev/null || true")
-            commands.append("sudo route -n add -net 128.0.0.0/1 -interface \(safeVpnIf) 2>/dev/null || true")
+            commands.append("sudo route -n add -net 0.0.0.0/1 -interface \(safeVpnIf) 2>&1 || true")
+            commands.append("sudo route -n add -net 128.0.0.0/1 -interface \(safeVpnIf) 2>&1 || true")
         } else {
             let safeGw = InputValidation.validateIPv4(vpnGw) ?? vpnGw
-            commands.append("sudo route -n add -net 0.0.0.0/1 \(safeGw) 2>/dev/null || true")
-            commands.append("sudo route -n add -net 128.0.0.0/1 \(safeGw) 2>/dev/null || true")
+            commands.append("sudo route -n add -net 0.0.0.0/1 \(safeGw) 2>&1 || true")
+            commands.append("sudo route -n add -net 128.0.0.0/1 \(safeGw) 2>&1 || true")
         }
 
         // Remove pf rules
-        commands.append("sudo pfctl -a '\(pfAnchor)' -F all 2>/dev/null || true")
+        commands.append("sudo pfctl -a '\(pfAnchor)' -F all 2>&1 || true")
 
         // Remove DNS resolver files
         for domain in validDomains {
@@ -190,7 +190,7 @@ final class SplitTunnelEngine {
 
         // Remove intranet-specific routes (VPN catch-all now covers them)
         for route in validRoutes {
-            commands.append("sudo route -n delete -net \(route) -interface \(safeVpnIf) 2>/dev/null || true")
+            commands.append("sudo route -n delete -net \(route) -interface \(safeVpnIf) 2>&1 || true")
         }
 
         // Clean up temp file
@@ -266,6 +266,12 @@ final class SplitTunnelEngine {
             proc.waitUntilExit()
         } catch {
             return (false, "Failed to run: \(error)")
+        }
+
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let outStr = String(data: outData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !outStr.isEmpty {
+            log("[shell] \(outStr)")
         }
 
         if proc.terminationStatus == 0 {
