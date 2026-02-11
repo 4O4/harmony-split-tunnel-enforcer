@@ -96,6 +96,21 @@ final class Config: ObservableObject {
         self.intranetRoutes = self.intranetRoutes.compactMap { InputValidation.validateCIDR($0) }
     }
 
+    func resetToConfigFile() {
+        defaults.removeObject(forKey: Keys.intranetDomains)
+        defaults.removeObject(forKey: Keys.intranetRoutes)
+        defaults.removeObject(forKey: Keys.autoApply)
+
+        let fileConfig = Self.loadConfigFile()
+        self.configFilePath = fileConfig.path
+
+        self.intranetDomains = (fileConfig.config?.intranetDomains ?? [])
+            .compactMap { InputValidation.validateDomain($0) }
+        self.intranetRoutes = (fileConfig.config?.intranetRoutes ?? [])
+            .compactMap { InputValidation.validateCIDR($0) }
+        self.autoApply = fileConfig.config?.autoApply ?? true
+    }
+
     private static func loadConfigFile() -> (config: ConfigFile?, path: String?) {
         for path in configSearchPaths {
             guard FileManager.default.fileExists(atPath: path),

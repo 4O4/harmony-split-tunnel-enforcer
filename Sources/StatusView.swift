@@ -164,6 +164,12 @@ struct StatusView: View {
                 .controlSize(.small)
                 .buttonStyle(.bordered)
 
+                if config.configFilePath != nil {
+                    Button("Reset Config") { config.resetToConfigFile() }
+                        .controlSize(.small)
+                        .buttonStyle(.bordered)
+                }
+
                 Spacer()
 
                 Button("Quit") { onQuit() }
