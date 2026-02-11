@@ -34,7 +34,7 @@ final class SplitTunnelEngine {
 
         log("Installing passwordless sudo rule (one-time setup)...")
 
-        let sudoersContent = "%admin ALL=(root) NOPASSWD: /sbin/route, /sbin/pfctl, /usr/bin/tee /etc/resolver/*, /bin/rm -f /etc/resolver/*, /bin/mkdir -p /etc/resolver"
+        let sudoersContent = "# Harmony Split Tunnel Enforcer - grants %admin passwordless access to network tools\n%admin ALL=(root) NOPASSWD: /sbin/route, /sbin/pfctl, /usr/bin/tee /etc/resolver/*, /bin/rm -f /etc/resolver/*, /bin/mkdir -p /etc/resolver"
 
         let script = "echo '\(sudoersContent)' > \(sudoersFile) && chmod 0440 \(sudoersFile)"
 
