@@ -98,13 +98,14 @@ final class VPNDetector: ObservableObject {
                 }
             }
 
-            // Detect any utun interface with routes (VPN tunnel)
-            if netif.hasPrefix("utun") && s.vpnInterface == nil {
-                s.vpnInterface = netif
-            }
-            // Capture VPN gateway if it's an IP address on a utun interface
-            if netif.hasPrefix("utun") && s.vpnGateway == nil && gateway.contains(".") && !gateway.hasPrefix("utun") {
-                s.vpnGateway = gateway
+            // Detect utun with IP gateway as potential VPN (less certain than catch-all)
+            if netif.hasPrefix("utun") && gateway.contains(".") && !gateway.hasPrefix("utun") {
+                if s.vpnInterface == nil {
+                    s.vpnInterface = netif
+                }
+                if s.vpnGateway == nil {
+                    s.vpnGateway = gateway
+                }
             }
         }
 
