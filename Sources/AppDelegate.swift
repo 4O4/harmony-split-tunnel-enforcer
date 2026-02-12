@@ -46,6 +46,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.updateStatusTitle() }
             .store(in: &cancellables)
 
+        // Re-apply split tunnel when config changes while already enforced
+        Publishers.Merge(
+            config.$intranetDomains.dropFirst().map { _ in () },
+            config.$intranetRoutes.dropFirst().map { _ in () }
+        )
+        .debounce(for: .seconds(1.0), scheduler: RunLoop.main)
+        .sink { [weak self] in
+            guard let self = self else { return }
+            guard self.vpnDetector.state.splitActive else { return }
+            self.engine.log("[AppDelegate] Config changed while split active, re-applying...")
+            self.applyOnce(force: true)
+        }
+        .store(in: &cancellables)
+
         // Route monitor — debounced, suppressed after manual restore
         routeMonitor.onRouteAdded = { [weak self] in
             guard let self = self else { return }
@@ -152,12 +166,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Actions
 
-    private func applyOnce() {
+    private func applyOnce(force: Bool = false) {
         let snap = config.snapshot()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let state = VPNDetector.detect()
-            let result = self.engine.applyOnce(state: state, config: snap)
+            let result = self.engine.applyOnce(state: state, config: snap, force: force)
             DispatchQueue.main.async {
                 self.vpnDetector.refresh()
                 if !result.success {

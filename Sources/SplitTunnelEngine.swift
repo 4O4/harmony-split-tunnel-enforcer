@@ -64,12 +64,14 @@ final class SplitTunnelEngine {
     // MARK: - Public API
 
     /// Apply split tunnel: zero-gap approach
-    func applyOnce(state: VPNState, config: Config.ConfigSnapshot) -> (success: Bool, message: String) {
+    func applyOnce(state: VPNState, config: Config.ConfigSnapshot, force: Bool = false) -> (success: Bool, message: String) {
         guard state.connected else {
             return (false, "VPN not connected")
         }
-        guard state.hasCatchAll else {
-            return (false, "No catch-all routes found — already split or not full tunnel")
+        if !force {
+            guard state.hasCatchAll else {
+                return (false, "No catch-all routes found — already split or not full tunnel")
+            }
         }
         guard let vpnIf = state.vpnInterface, let vpnGw = state.vpnGateway else {
             return (false, "Cannot determine VPN interface/gateway")
