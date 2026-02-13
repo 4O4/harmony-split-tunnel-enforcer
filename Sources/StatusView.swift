@@ -3,8 +3,10 @@ import SwiftUI
 struct StatusView: View {
     @ObservedObject var vpnDetector: VPNDetector
     @ObservedObject var config: Config
+    @ObservedObject var updateChecker: UpdateChecker
     var onApply: () -> Void
     var onRestore: () -> Void
+    var onCheckForUpdates: () -> Void
     var onQuit: () -> Void
 
     @State private var newDomain = ""
@@ -37,6 +39,21 @@ struct StatusView: View {
             }
 
             Divider()
+
+            if let update = updateChecker.availableUpdate {
+                Button(action: { NSWorkspace.shared.open(update.url) }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .foregroundColor(.blue)
+                        Text("Update available: v\(update.version)")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 2)
+                Divider()
+            }
 
             // VPN Status
             VStack(alignment: .leading, spacing: 4) {
@@ -166,6 +183,12 @@ struct StatusView: View {
 
                 if config.configFilePath != nil {
                     Button("Reset Config") { config.resetToConfigFile() }
+                        .controlSize(.small)
+                        .buttonStyle(.bordered)
+                }
+
+                if updateChecker.availableUpdate == nil {
+                    Button("Check for Updates") { onCheckForUpdates() }
                         .controlSize(.small)
                         .buttonStyle(.bordered)
                 }

@@ -5,6 +5,7 @@ APP_NAME="Harmony Split Tunnel Enforcer"
 BUNDLE_ID="net.rawbytes.harmony-split-tunnel-enforcer"
 EXECUTABLE="HarmonySplitTunnelEnforcer"
 
+# Set APP_VERSION env var to override CFBundleShortVersionString (default: 1.0.0)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
@@ -44,7 +45,7 @@ cat > "${CONTENTS}/Info.plist" << PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>${APP_VERSION:-1.0.0}</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>

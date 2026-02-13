@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let routeMonitor = RouteMonitor()
     private let config = Config.shared
     private let engine = SplitTunnelEngine.shared
+    private let updateChecker = UpdateChecker()
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -33,8 +34,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rootView: StatusView(
                 vpnDetector: vpnDetector,
                 config: config,
+                updateChecker: updateChecker,
                 onApply: { [weak self] in self?.applyOnce() },
                 onRestore: { [weak self] in self?.restore() },
+                onCheckForUpdates: { [weak self] in
+                    self?.updateChecker.checkNow()
+                },
                 onQuit: { [weak self] in self?.quit() }
             )
         )
@@ -113,6 +118,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+
+        // Check for updates after startup
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            self?.updateChecker.checkNow()
+            self?.updateChecker.startPolling()
+        }
     }
 
     private func updateStatusTitle() {
@@ -152,6 +163,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "View Log", action: #selector(menuViewLog), keyEquivalent: "l"))
+        menu.addItem(NSMenuItem(title: "Check for Updates", action: #selector(menuCheckForUpdates), keyEquivalent: "u"))
+
+        if let update = updateChecker.availableUpdate {
+            let updateItem = NSMenuItem(title: "Update Available: v\(update.version)", action: #selector(menuOpenUpdate), keyEquivalent: "")
+            updateItem.attributedTitle = NSAttributedString(
+                string: "Update Available: v\(update.version)",
+                attributes: [.foregroundColor: NSColor.systemBlue]
+            )
+            menu.addItem(updateItem)
+        }
+
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(menuQuit), keyEquivalent: "q"))
 
@@ -207,6 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func quit() {
         routeMonitor.stop()
         vpnDetector.stopPolling()
+        updateChecker.stopPolling()
         NSApp.terminate(nil)
     }
 
@@ -224,5 +247,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func menuViewLog() {
         NSWorkspace.shared.open(URL(fileURLWithPath: engine.logFilePath))
+    }
+
+    @objc private func menuCheckForUpdates() {
+        updateChecker.checkNow()
+    }
+
+    @objc private func menuOpenUpdate() {
+        if let update = updateChecker.availableUpdate {
+            NSWorkspace.shared.open(update.url)
+        }
     }
 }
