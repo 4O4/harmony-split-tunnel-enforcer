@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suppressAutoEnforce = false
     /// Debounce work item for route monitor events
     private var pendingAutoEnforce: DispatchWorkItem?
+    /// Track previous VPN state for disconnect detection
+    private var previousState = VPNState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: 16)
@@ -48,7 +50,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         vpnDetector.$state
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.updateStatusTitle() }
+            .sink { [weak self] newState in
+                guard let self = self else { return }
+                self.updateStatusTitle()
+
+                let old = self.previousState
+                self.previousState = newState
+
+                // Detect VPN disconnect while split was active → cleanup
+                if old.splitActive && !newState.connected {
+                    self.engine.log("[AppDelegate] VPN disconnected while split was active, cleaning up...")
+                    let snap = self.config.snapshot()
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        _ = self.engine.cleanup(config: snap)
+                        // Reinstall counter-routes for continued protection
+                        if let gw = newState.realGateway {
+                            _ = self.engine.installCounterRoutes(realGateway: gw)
+                        }
+                        DispatchQueue.main.async {
+                            self.vpnDetector.refresh()
+                        }
+                    }
+                }
+
+                // Detect real gateway change → update counter-routes
+                if let newGw = newState.realGateway, newGw != old.realGateway, old.realGateway != nil {
+                    self.engine.log("[AppDelegate] Real gateway changed (\(old.realGateway ?? "nil") → \(newGw)), updating counter-routes")
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        _ = self.engine.installCounterRoutes(realGateway: newGw)
+                    }
+                }
+            }
             .store(in: &cancellables)
 
         // Re-apply split tunnel when config changes while already enforced
@@ -102,8 +134,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         engine.log("Harmony Split Tunnel Enforcer started")
 
-        // Auto-enforce on startup if VPN is already in full tunnel mode
+        // Startup: crash recovery + counter-routes + auto-enforce
         let startupSnap = config.snapshot()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let state = VPNDetector.detect()
+
+            // Crash recovery: clean up orphaned pf rules from a previous crash
+            if !state.connected && self.engine.hasOrphanedRules() {
+                self.engine.log("Startup: Orphaned pf rules detected (previous crash?), cleaning up...")
+                _ = self.engine.cleanup(config: startupSnap)
+            }
+
+            // Install counter-routes immediately for privacy protection
+            if let gw = state.realGateway {
+                self.engine.log("Startup: Installing counter-routes via \(gw)")
+                _ = self.engine.installCounterRoutes(realGateway: gw)
+            }
+        }
+
+        // Auto-enforce on startup if VPN is already in full tunnel mode (delayed to let routes settle)
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2.0) { [weak self] in
             guard let self = self else { return }
             let state = VPNDetector.detect()
@@ -226,10 +276,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func quit() {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        popover.performClose(nil)
         routeMonitor.stop()
         vpnDetector.stopPolling()
         updateChecker.stopPolling()
+
+        engine.log("[AppDelegate] App terminating, restoring network state...")
+        let snap = config.snapshot()
+
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            let state = VPNDetector.detect()
+
+            if state.splitActive {
+                self.engine.log("[AppDelegate] Split active, restoring full tunnel...")
+                _ = self.engine.restore(state: state, config: snap)
+            } else if self.engine.hasOrphanedRules() {
+                self.engine.log("[AppDelegate] Orphaned rules found, cleaning up...")
+                _ = self.engine.cleanup(config: snap)
+            } else {
+                _ = self.engine.removeCounterRoutes()
+            }
+
+            DispatchQueue.main.async {
+                NSApp.reply(toApplicationShouldTerminate: true)
+            }
+        }
+
+        return .terminateLater
+    }
+
+    private func quit() {
         NSApp.terminate(nil)
     }
 

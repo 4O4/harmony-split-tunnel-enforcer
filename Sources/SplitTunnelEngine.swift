@@ -61,6 +61,48 @@ final class SplitTunnelEngine {
         }
     }
 
+    // MARK: - Counter-routes
+
+    private let counterNets = ["0.0.0.0/2", "64.0.0.0/2", "128.0.0.0/2", "192.0.0.0/2"]
+
+    /// Install /2 counter-routes via real gateway so personal traffic always bypasses VPN.
+    /// These are more specific than VPN's /1 catch-all routes, so they win in the routing table.
+    func installCounterRoutes(realGateway: String) -> (success: Bool, message: String) {
+        let access = ensureSudoAccess()
+        if !access.success { return access }
+
+        guard let safeGw = InputValidation.validateIPv4(realGateway) else {
+            return (false, "Invalid gateway: \(realGateway)")
+        }
+
+        log("Installing counter-routes via \(safeGw)")
+        var commands: [String] = []
+        for net in counterNets {
+            commands.append("sudo route -n delete -net \(net) 2>&1 || true")
+            commands.append("sudo route -n add -net \(net) \(safeGw) 2>&1 || true")
+        }
+        let result = runShell(script: commands.joined(separator: "\n"))
+        if result.success {
+            log("Counter-routes installed")
+        } else {
+            log("Counter-routes failed: \(result.message)")
+        }
+        return result
+    }
+
+    /// Remove /2 counter-routes
+    func removeCounterRoutes() -> (success: Bool, message: String) {
+        let access = ensureSudoAccess()
+        if !access.success { return access }
+
+        log("Removing counter-routes")
+        var commands: [String] = []
+        for net in counterNets {
+            commands.append("sudo route -n delete -net \(net) 2>&1 || true")
+        }
+        return runShell(script: commands.joined(separator: "\n"))
+    }
+
     // MARK: - Public API
 
     /// Apply split tunnel: zero-gap approach
@@ -113,6 +155,14 @@ final class SplitTunnelEngine {
             }
         }
         resolvedIPs = Array(Set(resolvedIPs))
+
+        // Step 2.5: Refresh counter-routes via real gateway (keeps personal traffic on en0)
+        if let realGw = state.realGateway, let safeRealGw = InputValidation.validateIPv4(realGw) {
+            for net in counterNets {
+                commands.append("sudo route -n delete -net \(net) 2>&1 || true")
+                commands.append("sudo route -n add -net \(net) \(safeRealGw) 2>&1 || true")
+            }
+        }
 
         // Step 3: Delete catch-all routes (AFTER adding specific routes — zero gap)
         commands.append("sudo route -n delete -net 0.0.0.0/1 -interface \(safeVpnIf) 2>&1 || true")
@@ -190,6 +240,11 @@ final class SplitTunnelEngine {
             commands.append("sudo rm -f \(resolverDir)/\(domain)")
         }
 
+        // Remove counter-routes (restoring full tunnel means VPN handles all traffic)
+        for net in counterNets {
+            commands.append("sudo route -n delete -net \(net) 2>&1 || true")
+        }
+
         // Remove intranet-specific routes (VPN catch-all now covers them)
         for route in validRoutes {
             commands.append("sudo route -n delete -net \(route) -interface \(safeVpnIf) 2>&1 || true")
@@ -208,6 +263,67 @@ final class SplitTunnelEngine {
             log("Restore failed: \(result.message)")
             return (false, result.message)
         }
+    }
+
+    /// Cleanup without VPN interface info (for VPN disconnect / crash recovery).
+    /// Removes pf rules, resolver files, counter-routes, and temp file.
+    func cleanup(config: Config.ConfigSnapshot) -> (success: Bool, message: String) {
+        log("=== Cleaning up split tunnel artifacts ===")
+
+        let access = ensureSudoAccess()
+        if !access.success { return access }
+
+        let validDomains = config.intranetDomains.compactMap { InputValidation.validateDomain($0) }
+
+        var commands: [String] = []
+
+        // Remove pf rules
+        commands.append("sudo pfctl -a '\(pfAnchor)' -F all 2>&1 || true")
+
+        // Remove DNS resolver files
+        for domain in validDomains {
+            commands.append("sudo rm -f \(resolverDir)/\(domain)")
+        }
+
+        // Remove counter-routes
+        for net in counterNets {
+            commands.append("sudo route -n delete -net \(net) 2>&1 || true")
+        }
+
+        // Clean up temp file
+        commands.append("rm -f /tmp/p81split-pf.conf")
+
+        let script = commands.joined(separator: "\n")
+        let result = runShell(script: script)
+
+        if result.success {
+            log("Cleanup completed")
+        } else {
+            log("Cleanup failed: \(result.message)")
+        }
+        return result
+    }
+
+    /// Check if our pf anchor has any rules loaded (detects crash leftovers).
+    func hasOrphanedRules() -> Bool {
+        guard sudoInstalled || testSudoAccess() else { return false }
+
+        let proc = Process()
+        let pipe = Pipe()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
+        proc.arguments = ["-n", "pfctl", "-a", pfAnchor, "-sr"]
+        proc.standardOutput = pipe
+        proc.standardError = FileHandle.nullDevice
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+        } catch {
+            return false
+        }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !output.isEmpty
     }
 
     // MARK: - DNS Resolution
