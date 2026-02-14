@@ -118,7 +118,8 @@ struct StatusView: View {
             Divider()
 
             // Domains section
-            DisclosureGroup(isExpanded: $showingDomainEditor) {
+            sectionHeader("Intranet Domains (\(config.intranetDomains.count))", isExpanded: $showingDomainEditor)
+            if showingDomainEditor {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(config.intranetDomains, id: \.self) { domain in
                         HStack {
@@ -145,17 +146,12 @@ struct StatusView: View {
                         .disabled(newDomain.isEmpty)
                     }
                 }
-                .padding(.leading, 8)
-            } label: {
-                Text("Intranet Domains (\(config.intranetDomains.count))")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture { withAnimation { showingDomainEditor.toggle() } }
+                .padding(.leading, 20)
             }
-            .font(.subheadline)
 
             // Routes section
-            DisclosureGroup(isExpanded: $showingRouteEditor) {
+            sectionHeader("Intranet Routes (\(config.intranetRoutes.count))", isExpanded: $showingRouteEditor)
+            if showingRouteEditor {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(config.intranetRoutes, id: \.self) { route in
                         HStack {
@@ -182,19 +178,25 @@ struct StatusView: View {
                         .disabled(newRoute.isEmpty)
                     }
                 }
-                .padding(.leading, 8)
-            } label: {
-                Text("Intranet Routes (\(config.intranetRoutes.count))")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture { withAnimation { showingRouteEditor.toggle() } }
+                .padding(.leading, 20)
             }
-            .font(.subheadline)
 
             Divider()
 
-            // More Options section
-            DisclosureGroup(isExpanded: $showingAdvanced) {
+            // More Options + Quit
+            HStack {
+                sectionHeader("More Options", isExpanded: $showingAdvanced)
+                Button("Quit") { showingQuitConfirm = true }
+                    .controlSize(.small)
+                    .buttonStyle(.bordered)
+                    .alert("Quit Harmony Split Tunnel Enforcer?", isPresented: $showingQuitConfirm) {
+                        Button("Cancel", role: .cancel) {}
+                        Button("Quit", role: .destructive) { onQuit() }
+                    } message: {
+                        Text("Network routes will be restored to their original state.")
+                    }
+            }
+            if showingAdvanced {
                 VStack(alignment: .leading, spacing: 6) {
                     Button("View Log") {
                         NSWorkspace.shared.open(URL(fileURLWithPath: SplitTunnelEngine.shared.logFilePath))
@@ -219,26 +221,9 @@ struct StatusView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 8)
+                .padding(.leading, 20)
                 .padding(.top, 4)
-            } label: {
-                HStack {
-                    Text("More Options")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture { withAnimation { showingAdvanced.toggle() } }
-                    Button("Quit") { showingQuitConfirm = true }
-                        .controlSize(.small)
-                        .buttonStyle(.bordered)
-                        .alert("Quit Harmony Split Tunnel Enforcer?", isPresented: $showingQuitConfirm) {
-                            Button("Cancel", role: .cancel) {}
-                            Button("Quit", role: .destructive) { onQuit() }
-                        } message: {
-                            Text("Network routes will be restored to their original state.")
-                        }
-                }
             }
-            .font(.subheadline)
         }
         .padding(16)
         .frame(width: 300)
@@ -272,6 +257,22 @@ struct StatusView: View {
               !config.intranetRoutes.contains(r) else { newRoute = ""; return }
         config.intranetRoutes.append(r)
         newRoute = ""
+    }
+
+    private func sectionHeader(_ title: String, isExpanded: Binding<Bool>) -> some View {
+        Button { isExpanded.wrappedValue.toggle() } label: {
+            HStack(spacing: 4) {
+                Image(systemName: isExpanded.wrappedValue ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 12)
+                Text(title)
+            }
+            .font(.subheadline)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func removeRoute(_ route: String) {
