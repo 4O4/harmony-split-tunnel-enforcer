@@ -117,7 +117,7 @@ struct StatusView: View {
             Divider()
 
             // Domains section
-            DisclosureGroup("Intranet Domains (\(config.intranetDomains.count))", isExpanded: $showingDomainEditor) {
+            DisclosureGroup(isExpanded: $showingDomainEditor) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(config.intranetDomains, id: \.self) { domain in
                         HStack {
@@ -145,11 +145,16 @@ struct StatusView: View {
                     }
                 }
                 .padding(.leading, 8)
+            } label: {
+                Text("Intranet Domains (\(config.intranetDomains.count))")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { showingDomainEditor.toggle() }
             }
             .font(.subheadline)
 
             // Routes section
-            DisclosureGroup("Intranet Routes (\(config.intranetRoutes.count))", isExpanded: $showingRouteEditor) {
+            DisclosureGroup(isExpanded: $showingRouteEditor) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(config.intranetRoutes, id: \.self) { route in
                         HStack {
@@ -177,13 +182,18 @@ struct StatusView: View {
                     }
                 }
                 .padding(.leading, 8)
+            } label: {
+                Text("Intranet Routes (\(config.intranetRoutes.count))")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { showingRouteEditor.toggle() }
             }
             .font(.subheadline)
 
             Divider()
 
             // More Options section
-            DisclosureGroup("More Options", isExpanded: $showingAdvanced) {
+            DisclosureGroup(isExpanded: $showingAdvanced) {
                 VStack(alignment: .leading, spacing: 6) {
                     Button("View Log") {
                         NSWorkspace.shared.open(URL(fileURLWithPath: SplitTunnelEngine.shared.logFilePath))
@@ -210,6 +220,11 @@ struct StatusView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 8)
                 .padding(.top, 4)
+            } label: {
+                Text("More Options")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { showingAdvanced.toggle() }
             }
             .font(.subheadline)
 
