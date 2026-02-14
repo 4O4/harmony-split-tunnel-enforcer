@@ -1,4 +1,4 @@
-# ADR-001: Counter-routes over pf rules for privacy protection
+# ADR-001: Counter-routes over pf rules for keeping personal traffic off VPN
 
 ## Status
 
@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-When Harmony SASE re-adds catch-all routes (`0/1`, `128.0/1`), personal traffic briefly routes through the corporate VPN before our app detects and removes them (~0.5s debounce window). We needed a mechanism to prevent personal traffic from ever touching the VPN tunnel.
+When Harmony SASE re-adds catch-all routes (`0/1`, `128.0/1`), personal traffic briefly routes through the corporate VPN before our app detects and removes them (~0.5s debounce window). This causes both a performance hit (added latency, reduced bandwidth through corporate gateway) and a privacy exposure (personal traffic visible on corporate network). We needed a mechanism to prevent personal traffic from ever touching the VPN tunnel.
 
 Two approaches were considered:
 

@@ -1,12 +1,17 @@
 # Requirements
 
-## Threat model
+## Motivation
 
 The user runs a corporate VPN (Harmony SASE / Perimeter 81 / Check Point) that installs **catch-all routes** (`0.0.0.0/1` and `128.0.0.0/1` via the utun interface). These routes force *all* traffic — including personal browsing, streaming, etc. — through the corporate VPN tunnel.
 
 **The goal is to prevent personal traffic from routing through the corporate VPN.** Only intranet traffic (specific CIDRs and domains configured by the user) should go through VPN. Everything else should use the real network interface (e.g., en0).
 
-This is the opposite of a traditional VPN kill switch. We are *not* trying to protect corporate/intranet traffic from leaking to the internet. We are protecting the user's privacy by keeping personal traffic off the corporate network.
+There are two reasons for this:
+
+- **Performance**: Routing all traffic through the corporate gateway adds latency, reduces bandwidth, and creates a bottleneck. Video calls, streaming, large downloads, and latency-sensitive applications all suffer unnecessarily when they could use the direct internet connection.
+- **Privacy**: Personal browsing activity, DNS queries, and traffic patterns are visible to the corporate network when all traffic routes through VPN. Users should not have to expose personal activity to corporate monitoring just to access a few intranet resources.
+
+This is the opposite of a traditional VPN kill switch. We are *not* trying to protect corporate/intranet traffic from leaking to the internet. We are keeping non-intranet traffic off the corporate network for performance and privacy.
 
 ## Functional requirements
 
@@ -18,7 +23,7 @@ This is the opposite of a traditional VPN kill switch. We are *not* trying to pr
 - Configure `/etc/resolver/` files so intranet domain DNS goes through VPN DNS
 - Install pf firewall rules to block intranet traffic on the real interface (defense-in-depth for intranet routing, not related to the primary privacy goal)
 
-### Zero-gap privacy protection
+### Zero-gap protection
 
 Personal traffic must never route through VPN, not even briefly. This means:
 

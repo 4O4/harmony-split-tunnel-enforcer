@@ -106,7 +106,7 @@ Written to `/tmp/harmony-split-tunnel-enforcer.log` with ISO8601 timestamps.
 - `docs/architecture.md` — routing fundamentals, enforcement flow, counter-routes lifecycle, pf rules purpose
 - `docs/adr/` — Architecture Decision Records for key design choices
 
-**Important for AI agents:** The threat model is about protecting **personal traffic from the corporate VPN**, not protecting intranet traffic from the internet. `docs/requirements.md` is auto-included in every session.
+**Important for AI agents:** The goal is keeping **personal traffic off the corporate VPN** for both performance and privacy — not protecting intranet traffic from the internet. `docs/requirements.md` is auto-included in every session.
 
 **Before modifying routing, pf rules, enforcement, cleanup, or lifecycle code:** read `docs/architecture.md` and the relevant ADRs in `docs/adr/`. These document non-obvious design decisions that were made for specific reasons (e.g., why counter-routes instead of pf on utun, why no suppression after VPN disconnect).
 
