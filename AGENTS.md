@@ -39,11 +39,14 @@ Order matters — this prevents traffic leaks:
 
 1. Add intranet CIDR routes via VPN interface
 2. Resolve intranet domain IPs via VPN DNS, add host routes
-3. Delete catch-all routes (`0/1`, `128.0/1`) from VPN interface
-4. Write `/etc/resolver/{domain}` files for DNS
-5. Install `pf` firewall rules under `com.apple/p81split` anchor
+3. Refresh counter-routes (`/2` routes via real gateway — keeps personal traffic on en0)
+4. Delete catch-all routes (`0/1`, `128.0/1`) from VPN interface
+5. Write `/etc/resolver/{domain}` files for DNS
+6. Install `pf` firewall rules under `com.apple/p81split` anchor
 
-Restore reverses this: re-add catch-all, flush pf, remove resolver files, delete intranet routes.
+Counter-routes are installed at app startup and refreshed during enforcement. They are more specific than VPN's `/1` catch-all routes, so personal traffic always uses the real interface. See `docs/adr/001-counter-routes-over-pf-for-privacy.md`.
+
+Restore reverses this: re-add catch-all, flush pf, remove resolver files, remove counter-routes, delete intranet routes.
 
 ### Config precedence
 
@@ -66,10 +69,17 @@ All user-controlled values (domains, CIDRs, IPs, interface names) are validated 
 
 One-time `osascript` admin prompt installs a passwordless sudoers rule at `/etc/sudoers.d/harmony-split-tunnel`. Scope: `route`, `pfctl`, `tee /etc/resolver/*`, `rm -f /etc/resolver/*`, `mkdir -p /etc/resolver`. All subsequent operations use `sudo -n` (non-interactive).
 
+### Lifecycle cleanup
+
+The app restores clean network state on quit, VPN disconnect, and crash recovery. Three cleanup paths exist depending on whether the VPN interface is still available. See `docs/adr/003-cleanup-strategy-per-lifecycle-event.md`.
+
+Termination uses async `applicationShouldTerminate` to avoid blocking the UI. See `docs/adr/004-async-termination.md`.
+
 ### Debounce & suppression (AppDelegate)
 
 - RTM_ADD events debounced with 0.5s delay; first event starts timer, subsequent events within window are ignored
 - After manual restore, auto-enforce is suppressed for 5s to let routes stabilize
+- After VPN disconnect, auto-enforce is NOT suppressed (see `docs/adr/005-no-suppress-on-vpn-disconnect.md`)
 - Startup auto-enforce fires 2s after launch
 
 ### Log
@@ -89,6 +99,14 @@ Written to `/tmp/harmony-split-tunnel-enforcer.log` with ISO8601 timestamps.
 | `Sources/StatusView.swift` | SwiftUI popover UI |
 | `Sources/MenuBarIcon.swift` | Programmatic menubar icon with status dots |
 | `Sources/main.swift` | App entry point |
+
+## Documentation
+
+- `docs/requirements.md` — threat model, functional/non-functional requirements, limitations
+- `docs/architecture.md` — routing fundamentals, enforcement flow, counter-routes lifecycle, pf rules purpose
+- `docs/adr/` — Architecture Decision Records for key design choices
+
+**Important for AI agents:** The threat model is about protecting **personal traffic from the corporate VPN**, not protecting intranet traffic from the internet. Read `docs/requirements.md` before making security-related changes.
 
 ## CI/CD
 
