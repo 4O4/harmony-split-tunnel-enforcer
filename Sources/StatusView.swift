@@ -15,6 +15,7 @@ struct StatusView: View {
     @State private var showingRouteEditor = false
     @State private var showingAdvanced = false
     @State private var showingResetConfirm = false
+    @State private var showingQuitConfirm = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -149,7 +150,7 @@ struct StatusView: View {
                 Text("Intranet Domains (\(config.intranetDomains.count))")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .onTapGesture { showingDomainEditor.toggle() }
+                    .onTapGesture { withAnimation { showingDomainEditor.toggle() } }
             }
             .font(.subheadline)
 
@@ -186,7 +187,7 @@ struct StatusView: View {
                 Text("Intranet Routes (\(config.intranetRoutes.count))")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .onTapGesture { showingRouteEditor.toggle() }
+                    .onTapGesture { withAnimation { showingRouteEditor.toggle() } }
             }
             .font(.subheadline)
 
@@ -221,20 +222,23 @@ struct StatusView: View {
                 .padding(.leading, 8)
                 .padding(.top, 4)
             } label: {
-                Text("More Options")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture { showingAdvanced.toggle() }
+                HStack {
+                    Text("More Options")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { withAnimation { showingAdvanced.toggle() } }
+                    Button("Quit") { showingQuitConfirm = true }
+                        .controlSize(.small)
+                        .buttonStyle(.bordered)
+                        .alert("Quit Harmony Split Tunnel Enforcer?", isPresented: $showingQuitConfirm) {
+                            Button("Cancel", role: .cancel) {}
+                            Button("Quit", role: .destructive) { onQuit() }
+                        } message: {
+                            Text("Network routes will be restored to their original state.")
+                        }
+                }
             }
             .font(.subheadline)
-
-            // Quit
-            HStack {
-                Spacer()
-                Button("Quit") { onQuit() }
-                    .controlSize(.small)
-                    .buttonStyle(.bordered)
-            }
         }
         .padding(16)
         .frame(width: 300)
