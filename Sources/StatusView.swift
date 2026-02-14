@@ -13,6 +13,7 @@ struct StatusView: View {
     @State private var newRoute = ""
     @State private var showingDomainEditor = false
     @State private var showingRouteEditor = false
+    @State private var showingAdvanced = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -28,9 +29,16 @@ struct StatusView: View {
                         Text("Enforcer")
                             .font(.system(size: 13, weight: .bold))
                     }
-                    Text("for Harmony")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Text("for Harmony")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
+                        if let version = appVersion {
+                            Text("v\(version)")
+                                .font(.system(size: 10, weight: .regular))
+                                .foregroundColor(.secondary.opacity(0.7))
+                        }
+                    }
                 }
                 Spacer()
                 Circle()
@@ -173,28 +181,33 @@ struct StatusView: View {
 
             Divider()
 
-            // Footer
-            HStack {
-                Button("View Log") {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: SplitTunnelEngine.shared.logFilePath))
-                }
-                .controlSize(.small)
-                .buttonStyle(.bordered)
+            // Advanced section
+            DisclosureGroup("Advanced", isExpanded: $showingAdvanced) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Button("View Log") {
+                        NSWorkspace.shared.open(URL(fileURLWithPath: SplitTunnelEngine.shared.logFilePath))
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.bordered)
 
-                if config.configFilePath != nil {
-                    Button("Reset Config") { config.resetToConfigFile() }
-                        .controlSize(.small)
-                        .buttonStyle(.bordered)
-                }
-
-                if updateChecker.availableUpdate == nil {
                     Button("Check for Updates") { onCheckForUpdates() }
                         .controlSize(.small)
                         .buttonStyle(.bordered)
+
+                    if config.configFilePath != nil {
+                        Button("Reset Config") { config.resetToConfigFile() }
+                            .controlSize(.small)
+                            .buttonStyle(.bordered)
+                    }
                 }
+                .padding(.leading, 8)
+                .padding(.top, 4)
+            }
+            .font(.subheadline)
 
+            // Quit
+            HStack {
                 Spacer()
-
                 Button("Quit") { onQuit() }
                     .controlSize(.small)
                     .buttonStyle(.bordered)
@@ -202,6 +215,10 @@ struct StatusView: View {
         }
         .padding(16)
         .frame(width: 300)
+    }
+
+    private var appVersion: String? {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
     }
 
     private var statusColor: Color {
