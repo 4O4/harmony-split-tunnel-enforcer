@@ -14,6 +14,7 @@ struct StatusView: View {
     @State private var showingDomainEditor = false
     @State private var showingRouteEditor = false
     @State private var showingAdvanced = false
+    @State private var showingResetConfirm = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -181,8 +182,8 @@ struct StatusView: View {
 
             Divider()
 
-            // Advanced section
-            DisclosureGroup("Advanced", isExpanded: $showingAdvanced) {
+            // More Options section
+            DisclosureGroup("More Options", isExpanded: $showingAdvanced) {
                 VStack(alignment: .leading, spacing: 6) {
                     Button("View Log") {
                         NSWorkspace.shared.open(URL(fileURLWithPath: SplitTunnelEngine.shared.logFilePath))
@@ -195,11 +196,18 @@ struct StatusView: View {
                         .buttonStyle(.bordered)
 
                     if config.configFilePath != nil {
-                        Button("Reset Config") { config.resetToConfigFile() }
+                        Button("Reset Config") { showingResetConfirm = true }
                             .controlSize(.small)
                             .buttonStyle(.bordered)
+                            .alert("Reset Configuration", isPresented: $showingResetConfirm) {
+                                Button("Cancel", role: .cancel) {}
+                                Button("Reset", role: .destructive) { config.resetToConfigFile() }
+                            } message: {
+                                Text("This will discard your current domains, routes, and preferences and replace them with values from:\n\n\(config.configFilePath ?? "")")
+                            }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 8)
                 .padding(.top, 4)
             }
@@ -219,6 +227,7 @@ struct StatusView: View {
 
     private var appVersion: String? {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+            ?? ProcessInfo.processInfo.environment["APP_VERSION"]
     }
 
     private var statusColor: Color {
