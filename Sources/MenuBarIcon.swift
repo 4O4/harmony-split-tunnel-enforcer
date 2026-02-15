@@ -4,13 +4,15 @@ enum MenuBarIcon {
 
     enum Status {
         case enforced       // green dot
-        case fullTunnel     // yellow dot
-        case disconnected   // red dot
+        case fullTunnel     // red dot — catch-all routes active
+        case connected      // yellow dot — VPN up, no catch-all
+        case disconnected   // gray dot
     }
 
     static func forState(_ state: VPNState) -> NSImage {
         if state.splitActive { return build(.enforced) }
         if state.hasCatchAll { return build(.fullTunnel) }
+        if state.connected { return build(.connected) }
         return build(.disconnected)
     }
 
@@ -68,14 +70,15 @@ enum MenuBarIcon {
             // --- Status dot — match Harmony SASE style ---
             ctx.setAlpha(1.0)
             let dotSize: CGFloat = 7.0
-            let dotX = size.width - dotSize
+            let dotX = size.width - dotSize - 1
             let dotY: CGFloat = 0.0
 
             let dotColor: NSColor
             switch status {
-            case .enforced:    dotColor = NSColor(red: 0.35, green: 0.78, blue: 0.28, alpha: 1) // Harmony green
-            case .fullTunnel:  dotColor = NSColor(red: 0.95, green: 0.75, blue: 0.0, alpha: 1)
-            case .disconnected: dotColor = NSColor(red: 0.85, green: 0.25, blue: 0.25, alpha: 1)
+            case .enforced:     dotColor = NSColor(red: 0.35, green: 0.78, blue: 0.28, alpha: 1) // Harmony green
+            case .fullTunnel:   dotColor = NSColor(red: 0.85, green: 0.25, blue: 0.25, alpha: 1)
+            case .connected:    dotColor = NSColor(red: 0.95, green: 0.75, blue: 0.0, alpha: 1)
+            case .disconnected: dotColor = NSColor.systemGray
             }
 
             ctx.setFillColor(dotColor.cgColor)
@@ -129,9 +132,10 @@ enum PopoverIcon {
 
             let dotColor: CGColor
             switch status {
-            case .enforced:    dotColor = CGColor(red: 0.35, green: 0.78, blue: 0.28, alpha: 1)
-            case .fullTunnel:  dotColor = CGColor(red: 0.95, green: 0.75, blue: 0.0, alpha: 1)
-            case .disconnected: dotColor = CGColor(red: 0.85, green: 0.25, blue: 0.25, alpha: 1)
+            case .enforced:     dotColor = CGColor(red: 0.35, green: 0.78, blue: 0.28, alpha: 1)
+            case .fullTunnel:   dotColor = CGColor(red: 0.85, green: 0.25, blue: 0.25, alpha: 1)
+            case .connected:    dotColor = CGColor(red: 0.95, green: 0.75, blue: 0.0, alpha: 1)
+            case .disconnected: dotColor = NSColor.systemGray.cgColor
             }
             ctx.setFillColor(dotColor)
             ctx.fillEllipse(in: CGRect(x: dotX, y: dotY, width: dotSize, height: dotSize))

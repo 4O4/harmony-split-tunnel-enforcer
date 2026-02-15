@@ -21,7 +21,7 @@ struct StatusView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack(spacing: 10) {
-                Image(nsImage: PopoverIcon.build(status: statusColor == .green ? .enforced : statusColor == .orange ? .fullTunnel : .disconnected))
+                Image(nsImage: PopoverIcon.build(status: popoverIconStatus))
                     .frame(width: 36, height: 36)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 0) {
@@ -234,10 +234,17 @@ struct StatusView: View {
             ?? ProcessInfo.processInfo.environment["APP_VERSION"]
     }
 
+    private var popoverIconStatus: MenuBarIcon.Status {
+        if vpnDetector.state.splitActive { return .enforced }
+        if vpnDetector.state.hasCatchAll { return .fullTunnel }
+        if vpnDetector.state.connected { return .connected }
+        return .disconnected
+    }
+
     private var statusColor: Color {
         if vpnDetector.state.splitActive { return .green }
-        if vpnDetector.state.hasCatchAll { return .orange }
-        if vpnDetector.state.connected { return .blue }
+        if vpnDetector.state.hasCatchAll { return Color(red: 0.85, green: 0.25, blue: 0.25) }
+        if vpnDetector.state.connected { return Color(red: 0.95, green: 0.75, blue: 0.0) }
         return .gray
     }
 
