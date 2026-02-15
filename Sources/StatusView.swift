@@ -204,6 +204,22 @@ struct StatusView: View {
                     .controlSize(.small)
                     .buttonStyle(.bordered)
 
+                    if FileManager.default.fileExists(atPath: SASELogWatcher.logPath) {
+                        Button("View SASE Log") {
+                            NSWorkspace.shared.open(URL(fileURLWithPath: SASELogWatcher.logPath))
+                        }
+                        .controlSize(.small)
+                        .buttonStyle(.bordered)
+                    }
+
+                    if FileManager.default.fileExists(atPath: SASELogWatcher.routeLogPath) {
+                        Button("View SASE Route Log") {
+                            NSWorkspace.shared.open(URL(fileURLWithPath: SASELogWatcher.routeLogPath))
+                        }
+                        .controlSize(.small)
+                        .buttonStyle(.bordered)
+                    }
+
                     Button("Check for Updates") { onCheckForUpdates() }
                         .controlSize(.small)
                         .buttonStyle(.bordered)
