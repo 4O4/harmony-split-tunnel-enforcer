@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import Network
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -10,6 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let config = Config.shared
     private let engine = SplitTunnelEngine.shared
     private let updateChecker = UpdateChecker()
+    private let saseLogWatcher = SASELogWatcher()
+    private let networkMonitor = NWPathMonitor()
+    private let networkMonitorQueue = DispatchQueue(label: "com.harmony.networkmonitor")
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -131,6 +135,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.vpnDetector.refresh()
         }
         routeMonitor.start()
+
+        // SASE daemon log watcher — early VPN state detection
+        saseLogWatcher.onVPNConnected = { [weak self] in
+            guard let self = self else { return }
+            self.engine.log("[AppDelegate] SASE log: VPN connected, refreshing state")
+            self.vpnDetector.refresh()
+        }
+        saseLogWatcher.onVPNDisconnected = { [weak self] in
+            guard let self = self else { return }
+            self.engine.log("[AppDelegate] SASE log: VPN disconnected, refreshing state")
+            self.vpnDetector.refresh()
+        }
+        saseLogWatcher.start()
+
+        // Sleep/wake hooks — immediate refresh on wake
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            self.engine.log("[AppDelegate] System wake detected, refreshing state")
+            self.vpnDetector.refresh()
+            // RouteMonitor's process may have died during sleep — restart ensures it's running
+            self.routeMonitor.stop()
+            self.routeMonitor.start()
+        }
+
+        // NWPathMonitor — instant network path change detection
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                self.engine.log("[AppDelegate] Network path changed: \(path.status), refreshing state")
+                self.vpnDetector.refresh()
+            }
+        }
+        networkMonitor.start(queue: networkMonitorQueue)
 
         engine.log("Harmony Split Tunnel Enforcer started")
 
@@ -281,6 +322,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         routeMonitor.stop()
         vpnDetector.stopPolling()
         updateChecker.stopPolling()
+        saseLogWatcher.stop()
+        networkMonitor.cancel()
 
         engine.log("[AppDelegate] App terminating, restoring network state...")
         let snap = config.snapshot()
